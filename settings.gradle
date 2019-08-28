@@ -1,1 +1,1 @@
-include ':app', ':calligraphylib'
+include ':app', ':calligraphy'
