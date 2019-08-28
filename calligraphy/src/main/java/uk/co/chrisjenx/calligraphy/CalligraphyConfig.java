@@ -53,6 +53,8 @@ public class CalligraphyConfig {
                 addAppCompatViews();
             }
         }
+
+        mFolderType = 3;
     }
 
     /**
@@ -93,6 +95,10 @@ public class CalligraphyConfig {
     }
 
     /**
+     * 字体引用方式
+     */
+    private static int mFolderType;
+    /**
      * Is a default font set?
      */
     private final boolean mIsFontSet;
@@ -122,11 +128,13 @@ public class CalligraphyConfig {
     private final Map<Class<? extends TextView>, Integer> mClassStyleAttributeMap;
     /**
      * Collection of custom non-{@code TextView}'s registered for applying typeface during inflation
+     *
      * @see Builder#addCustomViewWithSetTypeface(Class)
      */
     private final Set<Class<?>> hasTypefaceViews;
 
     protected CalligraphyConfig(Builder builder) {
+        mFolderType = builder.folderType;
         mIsFontSet = builder.isFontSet;
         mFontPath = builder.fontAssetPath;
         mAttrId = builder.attrId;
@@ -137,6 +145,10 @@ public class CalligraphyConfig {
         tempMap.putAll(builder.mStyleClassMap);
         mClassStyleAttributeMap = Collections.unmodifiableMap(tempMap);
         hasTypefaceViews = Collections.unmodifiableSet(builder.mHasTypefaceClasses);
+    }
+
+    public static int getFolderType() {
+        return mFolderType;
     }
 
     /**
@@ -210,11 +222,23 @@ public class CalligraphyConfig {
          */
         private String fontAssetPath = null;
         /**
+         * 字体文件位置
+         */
+        private int folderType = 1;
+        public static final int FOLDER_ASSETS = 1;
+        public static final int FOLDER_SDCARD = 2;
+        public static final int FOLDER_SYSTEM_DEFAULT = 3;
+        /**
          * Additional Class Styles. Can be empty.
          */
         private Map<Class<? extends TextView>, Integer> mStyleClassMap = new HashMap<>();
 
         private Set<Class<?>> mHasTypefaceClasses = new HashSet<>();
+
+        public CalligraphyConfig.Builder setFolderType(int folderType) {
+            this.folderType = folderType;
+            return this;
+        }
 
         /**
          * This defaults to R.attr.fontPath. So only override if you want to use your own attrId.
@@ -266,21 +290,21 @@ public class CalligraphyConfig {
          * Due to the poor inflation order where custom views are created and never returned inside an
          * {@code onCreateView(...)} method. We have to create CustomView's at the latest point in the
          * overrideable injection flow.
-         *
+         * <p>
          * On HoneyComb+ this is inside the {@link android.app.Activity#onCreateView(View, String, android.content.Context, android.util.AttributeSet)}
          * Pre HoneyComb this is in the {@link android.view.LayoutInflater.Factory#onCreateView(String, android.util.AttributeSet)}
-         *
+         * <p>
          * We wrap base implementations, so if you LayoutInflater/Factory/Activity creates the
          * custom view before we get to this point, your view is used. (Such is the case with the
          * TintEditText etc)
-         *
+         * <p>
          * The problem is, the native methods pass there parents context to the constructor in a really
          * specific place. We have to mimic this in {@link CalligraphyLayoutInflater#createCustomViewInternal(View, View, String, android.content.Context, android.util.AttributeSet)}
          * To mimic this we have to use reflection as the Class constructor args are hidden to us.
-         *
+         * <p>
          * We have discussed other means of doing this but this is the only semi-clean way of doing it.
          * (Without having to do proxy classes etc).
-         *
+         * <p>
          * Calling this will of course speed up inflation by turning off reflection, but not by much,
          * But if you want Calligraphy to inject the correct typeface then you will need to make sure your CustomView's
          * are created before reaching the LayoutInflater onViewCreated.
@@ -293,13 +317,13 @@ public class CalligraphyConfig {
         /**
          * Add a custom style to get looked up. If you use a custom class that has a parent style
          * which is not part of the default android styles you will need to add it here.
-         *
+         * <p>
          * The Calligraphy inflater is unaware of custom styles in your custom classes. We use
          * the class type to look up the style attribute in the theme resources.
-         *
+         * <p>
          * So if you had a {@code MyTextField.class} which looked up it's default style as
          * {@code R.attr.textFieldStyle} you would add those here.
-         *
+         * <p>
          * {@code builder.addCustomStyle(MyTextField.class,R.attr.textFieldStyle}
          *
          * @param styleClass             the class that related to the parent styleResource. null is ignored.
