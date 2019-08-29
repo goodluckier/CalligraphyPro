@@ -75,6 +75,18 @@ public class CalligraphyConfig {
         }
     }
 
+    private static CalligraphyConfig sInstance;
+
+    /**
+     * The current Calligraphy Config.
+     * If not set it will create a default config.
+     */
+    public static CalligraphyConfig get() {
+        if (sInstance == null)
+            sInstance = new CalligraphyConfig(new Builder());
+        return sInstance;
+    }
+
     /**
      * 字体引用方式
      */
