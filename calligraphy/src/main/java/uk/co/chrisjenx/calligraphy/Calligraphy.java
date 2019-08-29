@@ -1,18 +1,22 @@
 package uk.co.chrisjenx.calligraphy;
 
 import android.annotation.SuppressLint;
+import android.annotation.TargetApi;
 import android.content.Context;
 import android.graphics.Typeface;
+import android.os.Build;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.View;
+import android.view.ViewTreeObserver;
 import android.widget.TextView;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 
 import androidx.appcompat.widget.Toolbar;
 
-class CalligraphyFactory {
+class Calligraphy {
 
     private static final String ACTION_BAR_TITLE = "action_bar_title";
     private static final String ACTION_BAR_SUBTITLE = "action_bar_subtitle";
@@ -23,7 +27,7 @@ class CalligraphyFactory {
      * @param view view to check.
      * @return 2 element array, default to -1 unless a style has been found.
      */
-    protected static int[] getStyleForTextView(TextView view) {
+    protected int[] getStyleForTextView(TextView view) {
         final int[] styleIds = new int[]{-1, -1};
         // Try to find the specific actionbar styles
         if (isActionBarTitle(view)) {
@@ -35,8 +39,8 @@ class CalligraphyFactory {
         }
         if (styleIds[0] == -1) {
             // Use TextAppearance as default style
-            styleIds[0] = CalligraphyConfig.get().getClassStyles().containsKey(view.getClass())
-                    ? CalligraphyConfig.get().getClassStyles().get(view.getClass())
+            styleIds[0] = mCalligraphyConfig.getClassStyles().containsKey(view.getClass())
+                    ? mCalligraphyConfig.getClassStyles().get(view.getClass())
                     : android.R.attr.textAppearance;
         }
         return styleIds;
@@ -91,10 +95,12 @@ class CalligraphyFactory {
         return resourceEntryName.equalsIgnoreCase(matches);
     }
 
+    private final CalligraphyConfig mCalligraphyConfig;
     private final int[] mAttributeId;
 
-    public CalligraphyFactory(int attributeId) {
-        this.mAttributeId = new int[]{attributeId};
+    public Calligraphy(CalligraphyConfig calligraphyConfig) {
+        mCalligraphyConfig = calligraphyConfig;
+        this.mAttributeId = new int[]{calligraphyConfig.getAttrId()};
     }
 
     /**
@@ -137,27 +143,33 @@ class CalligraphyFactory {
                     textViewFont = CalligraphyUtils.pullFontPathFromTheme(context, styleForTextView[0], mAttributeId);
             }
 
+            textViewFont = applyFontMapper(textViewFont);
+
             // Still need to defer the Native action bar, appcompat-v7:21+ uses the Toolbar underneath. But won't match these anyway.
             final boolean deferred = matchesResourceIdName(view, ACTION_BAR_TITLE) || matchesResourceIdName(view, ACTION_BAR_SUBTITLE);
 
-            CalligraphyUtils.applyFontToTextView(context, (TextView) view, CalligraphyConfig.get(), textViewFont, deferred);
+            CalligraphyUtils.applyFontToTextView(context, (TextView) view, mCalligraphyConfig, textViewFont, deferred);
         }
 
         // AppCompat API21+ The ActionBar doesn't inflate default Title/SubTitle, we need to scan the
         // Toolbar(Which underlies the ActionBar) for its children.
         if (CalligraphyUtils.canCheckForV7Toolbar() && view instanceof Toolbar) {
-            applyFontToToolbar((Toolbar) view);
+            final Toolbar toolbar = (Toolbar) view;
+            toolbar.getViewTreeObserver().addOnGlobalLayoutListener(new ToolbarLayoutListener(this, context, toolbar));
         }
 
         // Try to set typeface for custom views using interface method or via reflection if available
         if (view instanceof HasTypeface) {
-            Typeface typeface = getDefaultTypeface(context, resolveFontPath(context, attrs));
+            String textViewFont = resolveFontPath(context, attrs);
+            textViewFont = applyFontMapper(textViewFont);
+            Typeface typeface = getDefaultTypeface(context, textViewFont);
             if (typeface != null) {
                 ((HasTypeface) view).setTypeface(typeface);
             }
-        } else if (CalligraphyConfig.get().isCustomViewTypefaceSupport() && CalligraphyConfig.get().isCustomViewHasTypeface(view)) {
+        } else if (mCalligraphyConfig.isCustomViewTypefaceSupport() && mCalligraphyConfig.isCustomViewHasTypeface(view)) {
             final Method setTypeface = ReflectionUtils.getMethod(view.getClass(), "setTypeface");
             String fontPath = resolveFontPath(context, attrs);
+            fontPath = applyFontMapper(fontPath);
             Typeface typeface = getDefaultTypeface(context, fontPath);
             if (setTypeface != null && typeface != null) {
                 ReflectionUtils.invokeMethod(view, setTypeface, typeface);
@@ -168,7 +180,7 @@ class CalligraphyFactory {
 
     private Typeface getDefaultTypeface(Context context, String fontPath) {
         if (TextUtils.isEmpty(fontPath)) {
-            fontPath = CalligraphyConfig.get().getFontPath();
+            fontPath = mCalligraphyConfig.getFontPath();
         }
         if (!TextUtils.isEmpty(fontPath)) {
             return TypefaceUtils.load(context.getAssets(), fontPath);
@@ -196,27 +208,60 @@ class CalligraphyFactory {
         return textViewFont;
     }
 
-    /**
-     * Will forcibly set text on the views then remove ones that didn't have copy.
-     *
-     * @param view toolbar view.
-     */
-    private void applyFontToToolbar(final Toolbar view) {
-        final CharSequence previousTitle = view.getTitle();
-        final CharSequence previousSubtitle = view.getSubtitle();
-        // The toolbar inflates both the title and the subtitle views lazily but luckily they do it
-        // synchronously when you set a title and a subtitle programmatically.
-        // So we set a title and a subtitle to something, then get the views, then revert.
-        view.setTitle("uk.co.chrisjenx.calligraphy:toolbar_title");
-        view.setSubtitle("uk.co.chrisjenx.calligraphy:toolbar_subtitle");
-
-        // Iterate through the children to run post inflation on them
-        final int childCount = view.getChildCount();
-        for (int i = 0; i < childCount; i++) {
-            onViewCreated(view.getChildAt(i), view.getContext(), null);
-        }
-        // Remove views from view if they didn't have copy set.
-        view.setTitle(previousTitle);
-        view.setSubtitle(previousSubtitle);
+    private String applyFontMapper(String textViewFont) {
+        FontMapper fontMapper = mCalligraphyConfig.getFontMapper();
+        return fontMapper != null ? fontMapper.map(textViewFont) : textViewFont;
     }
+
+    private static class ToolbarLayoutListener implements ViewTreeObserver.OnGlobalLayoutListener {
+
+        static String BLANK = " ";
+
+        private final WeakReference<Calligraphy> mCalligraphyFactory;
+        private final WeakReference<Context> mContextRef;
+        private final WeakReference<Toolbar> mToolbarReference;
+        private final CharSequence originalSubTitle;
+
+        private ToolbarLayoutListener(final Calligraphy calligraphy,
+                                      final Context context, Toolbar toolbar) {
+            mCalligraphyFactory = new WeakReference<>(calligraphy);
+            mContextRef = new WeakReference<>(context);
+            mToolbarReference = new WeakReference<>(toolbar);
+            originalSubTitle = toolbar.getSubtitle();
+            toolbar.setSubtitle(BLANK);
+        }
+
+        @TargetApi(Build.VERSION_CODES.JELLY_BEAN)
+        @Override public void onGlobalLayout() {
+            final Toolbar toolbar = mToolbarReference.get();
+            final Context context = mContextRef.get();
+            final Calligraphy factory = mCalligraphyFactory.get();
+            if (toolbar == null) return;
+            if (factory == null || context == null) {
+                removeSelf(toolbar);
+                return;
+            }
+
+            int childCount = toolbar.getChildCount();
+            if (childCount != 0) {
+                // Process children, defer draw as it has set the typeface.
+                for (int i = 0; i < childCount; i++) {
+                    factory.onViewCreated(toolbar.getChildAt(i), context, null);
+                }
+            }
+            removeSelf(toolbar);
+            toolbar.setSubtitle(originalSubTitle);
+        }
+
+        private void removeSelf(final Toolbar toolbar) {// Our dark deed is done
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN) {
+                //noinspection deprecation
+                toolbar.getViewTreeObserver().removeGlobalOnLayoutListener(this);
+            } else {
+                toolbar.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+            }
+        }
+
+    }
+
 }

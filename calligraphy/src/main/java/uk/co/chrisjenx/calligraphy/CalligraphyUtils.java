@@ -167,9 +167,23 @@ public final class CalligraphyUtils {
         }
 
         final int stringResourceId = attrs.getAttributeResourceValue(null, attributeName, -1);
-        return stringResourceId > 0
+        String fontPath = stringResourceId > 0
                 ? context.getString(stringResourceId)
                 : attrs.getAttributeValue(null, attributeName);
+
+        if (fontPath != null && fontPath.startsWith("?") && fontPath.length() > 1) {
+            String fontPathValueAttr = fontPath.substring(1);
+            if (TextUtils.isDigitsOnly(fontPathValueAttr)) {
+                int fontPathValueAttrRes = Integer.parseInt(fontPathValueAttr);
+                TypedValue typedValue = new TypedValue();
+                context.getTheme().resolveAttribute(fontPathValueAttrRes, typedValue, true);
+                if (typedValue.type == TypedValue.TYPE_STRING && typedValue.string != null) {
+                    fontPath = typedValue.string.toString();
+                }
+            }
+        }
+
+        return fontPath;
     }
 
     /**
@@ -323,7 +337,7 @@ public final class CalligraphyUtils {
     static boolean canCheckForV7Toolbar() {
         if (sToolbarCheck == null) {
             try {
-                Class.forName("android.support.v7.widget.Toolbar");
+                Class.forName("androidx.appcompat.widget.Toolbar");
                 sToolbarCheck = Boolean.TRUE;
             } catch (ClassNotFoundException e) {
                 sToolbarCheck = Boolean.FALSE;
@@ -340,7 +354,7 @@ public final class CalligraphyUtils {
     static boolean canAddV7AppCompatViews() {
         if (sAppCompatViewCheck == null) {
             try {
-                Class.forName("android.support.v7.widget.AppCompatTextView");
+                Class.forName("androidx.appcompat.widget.AppCompatTextView");
                 sAppCompatViewCheck = Boolean.TRUE;
             } catch (ClassNotFoundException e) {
                 sAppCompatViewCheck = Boolean.FALSE;
