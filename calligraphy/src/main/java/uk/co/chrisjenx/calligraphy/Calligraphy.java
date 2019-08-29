@@ -16,7 +16,7 @@ import java.lang.reflect.Method;
 
 import androidx.appcompat.widget.Toolbar;
 
-class Calligraphy {
+public class Calligraphy {
 
     private static final String ACTION_BAR_TITLE = "action_bar_title";
     private static final String ACTION_BAR_SUBTITLE = "action_bar_subtitle";
