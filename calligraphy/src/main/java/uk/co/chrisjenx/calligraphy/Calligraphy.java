@@ -95,12 +95,20 @@ class Calligraphy {
         return resourceEntryName.equalsIgnoreCase(matches);
     }
 
-    private final CalligraphyConfig mCalligraphyConfig;
+    // modify by gss
+    public static CalligraphyConfig mCalligraphyConfig;
     private final int[] mAttributeId;
 
     public Calligraphy(CalligraphyConfig calligraphyConfig) {
         mCalligraphyConfig = calligraphyConfig;
         this.mAttributeId = new int[]{calligraphyConfig.getAttrId()};
+    }
+
+    // add by gss
+    public static CalligraphyConfig getConfig() {
+        if (mCalligraphyConfig == null)
+            mCalligraphyConfig = new CalligraphyConfig.Builder().build();
+        return mCalligraphyConfig;
     }
 
     /**
@@ -232,7 +240,8 @@ class Calligraphy {
         }
 
         @TargetApi(Build.VERSION_CODES.JELLY_BEAN)
-        @Override public void onGlobalLayout() {
+        @Override
+        public void onGlobalLayout() {
             final Toolbar toolbar = mToolbarReference.get();
             final Context context = mContextRef.get();
             final Calligraphy factory = mCalligraphyFactory.get();
