@@ -20,7 +20,3 @@ In order to use the library, there are 2 different options:
 	         implementation 'com.github.shoushuai:CalligraphyPro:1.0.4'
 	}
 ```
-
-## Thank
-
-https://github.com/InflationX/Calligraphy
